@@ -22,9 +22,9 @@ const RAW_MAZE: number[][] = [
   [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 2, 0, 0, 2, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0, 0, 4, 4, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-  [0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-  [2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2],
-  [0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0, 2, 2, 2, 2, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+  [2, 2, 2, 2, 2, 2, 1, 2, 2, 2, 0, 0, 2, 2, 2, 2, 0, 0, 2, 2, 2, 1, 2, 2, 2, 2, 2, 2],
+  [0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0, 2, 2, 2, 2, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0],
   [0, 0, 0, 0, 0, 0, 1, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0, 1, 0, 0, 0, 0, 0, 0],
@@ -47,7 +47,7 @@ const ROWS = RAW_MAZE.length;    // 31
 
 // Offset to center horizontally on the canvas
 const OFFSET_X = (CANVAS_WIDTH - COLS * CELL) / 2;
-const OFFSET_Y = 0;
+const OFFSET_Y = 30;
 
 type Dir = { x: number; y: number };
 const DIRS: Record<string, Dir> = {
@@ -103,10 +103,11 @@ const cellToPixel = (col: number, row: number) => ({
   py: OFFSET_Y + row * CELL + CELL / 2,
 });
 
-const isWalkable = (maze: number[][], col: number, row: number): boolean => {
+const isWalkable = (maze: number[][], col: number, row: number, isGhostHouseDoorAllowed: boolean = false): boolean => {
   if (row < 0 || row >= ROWS) return true; // tunnels wrap
   if (col < 0 || col >= COLS) return true;
-  return maze[row][col] !== 0 && maze[row][col] !== 4;
+  if (maze[row][col] === 4) return isGhostHouseDoorAllowed;
+  return maze[row][col] !== 0;
 };
 
 const countPellets = (maze: number[][]) =>
@@ -153,16 +154,33 @@ const chooseGhostDir = (
       }
     }
   } else if (ghost.mode === 'frightened') {
-    // Random: pick random walkable neighbour
-    const candidates: Dir[] = [];
-    for (const d of [DIRS.LEFT, DIRS.RIGHT, DIRS.UP, DIRS.DOWN]) {
+    targetCol = pacCol;
+    targetRow = pacRow;
+    let bestDir = dir;
+    let bestDist = -Infinity;
+    const isGhostHouseDoorAllowed = ghost.mode === 'dead' || (row >= 13 && row <= 15);
+    
+    for (const d of [DIRS.UP, DIRS.LEFT, DIRS.DOWN, DIRS.RIGHT]) {
       const nc = col + d.x;
       const nr = row + d.y;
-      if (isWalkable(maze, nc, nr) && !(d.x === -dir.x && d.y === -dir.y)) {
-        candidates.push(d);
+      if (d.x === -dir.x && d.y === -dir.y) continue; // no reverse
+      if (!isWalkable(maze, nc, nr, isGhostHouseDoorAllowed)) continue;
+      const dist = manhattanDist(nc, nr, targetCol, targetRow);
+      if (dist > bestDist) {
+        bestDist = dist;
+        bestDir = d;
       }
     }
-    return candidates.length ? candidates[Math.floor(Math.random() * candidates.length)] : dir;
+    
+    if (bestDist === -Infinity) {
+       for (const d of [DIRS.UP, DIRS.LEFT, DIRS.DOWN, DIRS.RIGHT]) {
+          const nc = col + d.x;
+          const nr = row + d.y;
+          if (!isWalkable(maze, nc, nr, isGhostHouseDoorAllowed)) continue;
+          bestDir = d;
+       }
+    }
+    return bestDir;
   } else if (ghost.mode === 'dead') {
     // Head to ghost house (col 13, row 13)
     targetCol = 13;
@@ -172,12 +190,13 @@ const chooseGhostDir = (
   // Pick the walkable neighbour closest to target (not reversing unless no choice)
   let bestDir = dir;
   let bestDist = Infinity;
+  const isGhostHouseDoorAllowed = ghost.mode === 'dead' || (row >= 13 && row <= 15);
   for (const d of [DIRS.UP, DIRS.LEFT, DIRS.DOWN, DIRS.RIGHT]) {
     const nc = col + d.x;
     const nr = row + d.y;
     // Cannot reverse
     if (d.x === -dir.x && d.y === -dir.y) continue;
-    if (!isWalkable(maze, nc, nr)) continue;
+    if (!isWalkable(maze, nc, nr, isGhostHouseDoorAllowed)) continue;
     const dist = manhattanDist(nc, nr, targetCol, targetRow);
     if (dist < bestDist) {
       bestDist = dist;
@@ -236,7 +255,7 @@ export const Pacman: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         py,
         dir: DIRS.LEFT,
         nextDir: DIRS.LEFT,
-        mode: 'scatter' as GhostMode,
+        mode: 'chase' as GhostMode,
         color: s.color,
         scatterTarget: s.scatter,
         frightenTimer: 0,
@@ -467,19 +486,10 @@ export const Pacman: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           g.px = ghostCenter.px;
           g.py = ghostCenter.py;
 
-          const newCol = g.col + g.dir.x;
-          const newRow = g.row + g.dir.y;
-
-          // Check if we've moved to the next cell
-          if (isWalkable(s.maze, newCol, newRow)) {
-            g.col = ((newCol % COLS) + COLS) % COLS;
-            g.row = Math.max(0, Math.min(ROWS - 1, newRow));
-            const np = cellToPixel(g.col, g.row);
-            g.px = np.px;
-            g.py = np.py;
-          }
-
           g.dir = chooseGhostDir(g, s.maze, s.pacCol, s.pacRow, s.pacDir);
+
+          g.col = ((g.col + g.dir.x % COLS) + COLS) % COLS;
+          g.row = Math.max(0, Math.min(ROWS - 1, g.row + g.dir.y));
         }
       });
 

@@ -60,6 +60,7 @@ export const SpaceInvaders: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     lastEnemyShootTime: 0,
     invaderAnimFrame: 0,
     invaderAnimTimer: 0,
+    isTransitioning: false,
     stars: [] as { x: number; y: number; size: number; speed: number }[],
   });
 
@@ -90,14 +91,15 @@ export const SpaceInvaders: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     stateRef.current.gameState = gameState;
   }, [gameState]);
 
-  const initGame = () => {
+  const initGame = (currentLevel: number = level) => {
     const state = stateRef.current;
+    state.isTransitioning = false;
     state.playerX = CANVAS_WIDTH / 2;
     state.bullets = [];
     state.enemyBullets = [];
     state.particles = [];
     state.invaderDirection = 1;
-    state.invaderSpeed = 1.0 + level * 0.3; // speed increases with level
+    state.invaderSpeed = 1.0 + (currentLevel - 1) * 0.15; // speed increases slowly with level
     
     // Create grid of invaders
     const invaders: Invader[] = [];
@@ -131,7 +133,7 @@ export const SpaceInvaders: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setLevel(1);
     setScore(0);
     setLives(3);
-    initGame();
+    initGame(1);
     setGameState('playing');
     audio.playGameStart();
   };
@@ -140,7 +142,7 @@ export const SpaceInvaders: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setLevel(1);
     setScore(0);
     setLives(3);
-    initGame();
+    initGame(1);
     setGameState('playing');
     audio.playGameStart();
   };
@@ -371,16 +373,16 @@ export const SpaceInvaders: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       }
 
       // Check level clear
-      if (activeInvaders.length === 0) {
-        setLevel(l => {
-          const nextL = l + 1;
-          // Spawn fanfare and delay briefly
-          audio.playPowerUp();
-          setTimeout(() => {
-            initGame();
-          }, 500);
-          return nextL;
-        });
+      if (activeInvaders.length === 0 && !state.isTransitioning) {
+        state.isTransitioning = true;
+        audio.playPowerUp();
+        setTimeout(() => {
+          setLevel(l => {
+            const nextL = l + 1;
+            initGame(nextL);
+            return nextL;
+          });
+        }, 500);
       }
     };
 

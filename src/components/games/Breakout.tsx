@@ -13,6 +13,8 @@ interface Brick {
   color: string;
   points: number;
   alive: boolean;
+  hard: boolean; // true for bricks that need two hits
+  hitsRemaining: number; // 2 for untouched hard bricks, 1 after first hit
 }
 
 interface Particle {
@@ -23,6 +25,16 @@ interface Particle {
   color: string;
   size: number;
   life: number;
+}
+
+// Power‑up capsule dropped from bricks
+interface PowerUp {
+  id: number;
+  x: number;
+  y: number;
+  type: 'large' | 'glue' | 'gun' | 'ghost';
+  color: string;
+  spawnTime: number;
 }
 
 export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -52,6 +64,16 @@ export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     bricks: [] as Brick[],
     particles: [] as Particle[],
     ballTrail: [] as { x: number; y: number }[],
+    // New power‑up state
+    powerUps: [] as PowerUp[],
+    activePowerUps: {} as Record<string, number>, // expiry timestamps
+    isLargeBarActive: false,
+    isGlueActive: false,
+    isGunActive: false,
+    isGhostActive: false,
+    bullets: [] as { x: number; y: number; dx: number; dy: number }[],
+    lastGunShot: 0,
+    isTransitioning: false,
   });
 
   // Track high score
@@ -66,9 +88,9 @@ export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     stateRef.current.gameState = gameState;
   }, [gameState]);
 
-  const initBricks = () => {
+  const initBricks = (currentLevel: number) => {
     const state = stateRef.current;
-    const rows = 4 + Math.min(2, Math.floor(level / 2)); // increases rows slightly
+    const rows = 4 + Math.min(2, Math.floor(currentLevel / 2)); // increases rows slightly
     const cols = 9;
     const padding = 12;
     const startX = 65;
@@ -91,28 +113,44 @@ export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           color,
           points,
           alive: true,
+          hard: false,
+          hitsRemaining: 1,
         });
       }
+    }
+
+    // Determine hard bricks count based on level (more hard bricks on higher levels)
+    const hardCount = Math.min(currentLevel, 6); // cap at 6 hard bricks
+    for (let i = 0; i < hardCount; i++) {
+      const idx = Math.floor(Math.random() * bricks.length);
+      bricks[idx].hard = true;
+      bricks[idx].hitsRemaining = 2;
+      // Use a distinct colour for untouched hard bricks
+      bricks[idx].color = '#ff007f'; // neon magenta
     }
     state.bricks = bricks;
   };
 
-  const initGame = () => {
+  const initGame = (currentLevel: number = level) => {
     const state = stateRef.current;
     state.paddleX = CANVAS_WIDTH / 2;
-    state.paddleWidth = Math.max(60, 110 - level * 8); // paddle shrinks as level increases
+    state.paddleWidth = Math.max(60, 110 - currentLevel * 8); // paddle shrinks as level increases
     state.ballX = state.paddleX;
     state.ballY = CANVAS_HEIGHT - 30 - state.paddleHeight - state.ballRadius;
     state.isBallAttached = true;
     state.ballTrail = [];
     state.particles = [];
+    state.powerUps = [];
+    state.bullets = [];
+    state.activePowerUps = {};
     
-    const speed = 5 + level * 0.5;
+    const speed = 5 + currentLevel * 0.5;
     state.ballSpeed = speed;
     state.ballDx = speed * Math.cos(Math.PI / 4);
     state.ballDy = -speed * Math.sin(Math.PI / 4);
 
-    initBricks();
+    initBricks(currentLevel);
+    state.isTransitioning = false;
   };
 
   const startGame = () => {
@@ -202,24 +240,54 @@ export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       const state = stateRef.current;
       if (state.gameState !== 'playing') return;
 
+      // Update Powerup Durations
+      const now = Date.now();
+      state.isLargeBarActive = (state.activePowerUps['large'] || 0) > now;
+      state.isGlueActive = (state.activePowerUps['glue'] || 0) > now;
+      state.isGunActive = (state.activePowerUps['gun'] || 0) > now;
+      state.isGhostActive = (state.activePowerUps['ghost'] || 0) > now;
+
       // Move Paddle Left/Right
+      const currentPaddleW = state.isLargeBarActive ? 160 : state.paddleWidth;
       if (state.keys['ArrowLeft'] || state.keys['a'] || state.keys['A']) {
-        state.paddleX = Math.max(state.paddleWidth / 2 + 10, state.paddleX - state.paddleSpeed);
+        state.paddleX = Math.max(currentPaddleW / 2 + 10, state.paddleX - state.paddleSpeed);
       }
       if (state.keys['ArrowRight'] || state.keys['d'] || state.keys['D']) {
-        state.paddleX = Math.min(CANVAS_WIDTH - state.paddleWidth / 2 - 10, state.paddleX + state.paddleSpeed);
+        state.paddleX = Math.min(CANVAS_WIDTH - currentPaddleW / 2 - 10, state.paddleX + state.paddleSpeed);
       }
-
-      // Ball attached movement
-      if (state.isBallAttached) {
-        state.ballX = state.paddleX;
-        state.ballY = CANVAS_HEIGHT - 30 - state.paddleHeight - state.ballRadius;
-        
-        // Launch ball on Space
-        if (state.keys[' '] || state.keys['ArrowUp'] || state.keys['w'] || state.keys['W']) {
-          state.isBallAttached = false;
-          audio.playLaser();
-        }
+        // Ball attached movement
+        if (state.isBallAttached) {
+          state.ballX = state.paddleX;
+          state.ballY = CANVAS_HEIGHT - 30 - state.paddleHeight - state.ballRadius;
+          
+          // Launch ball on Space
+          if (state.keys[' '] || state.keys['ArrowUp'] || state.keys['w'] || state.keys['W']) {
+            if (state.isGunActive) {
+              const now = Date.now();
+              const cooldown = 1200; // 1.2 seconds
+              if (now - state.lastGunShot >= cooldown) {
+                state.lastGunShot = now;
+                // Fire two bullets from paddle edges
+                const currentPaddleW = state.isLargeBarActive ? 160 : state.paddleWidth;
+                const leftX = state.paddleX - currentPaddleW / 2 + 10;
+                const rightX = state.paddleX + currentPaddleW / 2 - 10;
+                const bulletY = CANVAS_HEIGHT - 30 - state.paddleHeight;
+                state.bullets.push({ x: leftX, y: bulletY, dx: 0, dy: -6 });
+                state.bullets.push({ x: rightX, y: bulletY, dx: 0, dy: -6 });
+              }
+            } else {
+              // Release the ball with initial velocity
+              state.isBallAttached = false;
+              // Deactivate glue power-up when ball is released
+              state.isGlueActive = false;
+              state.activePowerUps['glue'] = 0;
+              // Reset speed based on current level speed setting
+              const speed = state.ballSpeed;
+              state.ballDx = speed * Math.cos(Math.PI / 4);
+              state.ballDy = -speed * Math.sin(Math.PI / 4);
+              audio.playLaser();
+            }
+          }
       } else {
         // Record trail points
         state.ballTrail.push({ x: state.ballX, y: state.ballY });
@@ -231,25 +299,39 @@ export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         state.ballX += state.ballDx;
         state.ballY += state.ballDy;
 
-        // Collision: Left/Right boundaries
-        if (state.ballX - state.ballRadius <= 0) {
-          state.ballX = state.ballRadius;
-          state.ballDx = -state.ballDx;
-          audio.playScore();
-          spawnParticles(0, state.ballY, '#fff', 5);
-        } else if (state.ballX + state.ballRadius >= CANVAS_WIDTH) {
-          state.ballX = CANVAS_WIDTH - state.ballRadius;
-          state.ballDx = -state.ballDx;
-          audio.playScore();
-          spawnParticles(CANVAS_WIDTH, state.ballY, '#fff', 5);
+        // Gun fire while ball is free (space key)
+        if (state.isGunActive && (state.keys[' '] || state.keys['ArrowUp'] || state.keys['w'] || state.keys['W'])) {
+          const now = Date.now();
+          const cooldown = 1200; // 1.2 s
+          if (now - state.lastGunShot >= cooldown) {
+            state.lastGunShot = now;
+            // Fire two bullets from paddle edges (use current paddle width)
+            const currentPaddleW = state.isLargeBarActive ? 160 : state.paddleWidth;
+            const leftX = state.paddleX - currentPaddleW / 2 + 10;
+            const rightX = state.paddleX + currentPaddleW / 2 - 10;
+            const bulletY = CANVAS_HEIGHT - 30 - state.paddleHeight;
+            state.bullets.push({ x: leftX, y: bulletY, dx: 0, dy: -6 });
+            state.bullets.push({ x: rightX, y: bulletY, dx: 0, dy: -6 });
+          }
         }
+
+          // Side wall collision – bounce without residual dots
+          if (state.ballX - state.ballRadius <= 0) {
+            state.ballX = state.ballRadius;
+            state.ballDx = -state.ballDx;
+            audio.playScore();
+          } else if (state.ballX + state.ballRadius >= CANVAS_WIDTH) {
+            state.ballX = CANVAS_WIDTH - state.ballRadius;
+            state.ballDx = -state.ballDx;
+            audio.playScore();
+          }
 
         // Collision: Top boundary
         if (state.ballY - state.ballRadius <= 0) {
           state.ballY = state.ballRadius;
           state.ballDy = -state.ballDy;
           audio.playScore();
-          spawnParticles(state.ballX, 0, '#fff', 5);
+          // Removed particle spawn to avoid residual dots
         }
 
         // Collision: Bottom boundary (Losing life)
@@ -276,8 +358,8 @@ export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
         // Collision: Paddle reflection
         const pTop = CANVAS_HEIGHT - 30 - state.paddleHeight;
-        const pLeft = state.paddleX - state.paddleWidth / 2;
-        const pRight = state.paddleX + state.paddleWidth / 2;
+        const pLeft = state.paddleX - currentPaddleW / 2;
+        const pRight = state.paddleX + currentPaddleW / 2;
 
         if (
           state.ballY + state.ballRadius >= pTop &&
@@ -286,16 +368,18 @@ export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           state.ballX <= pRight &&
           state.ballDy > 0 // traveling downwards
         ) {
-          // Reflect ball based on where it hit the paddle (radial angles)
-          const hitPosition = (state.ballX - state.paddleX) / (state.paddleWidth / 2); // -1.0 to 1.0
-          const bounceAngle = hitPosition * (Math.PI / 3.2); // max 56 degree reflection
-          
-          state.ballDx = state.ballSpeed * Math.sin(bounceAngle);
-          state.ballDy = -state.ballSpeed * Math.cos(bounceAngle);
-          
-          state.ballY = pTop - state.ballRadius; // pop above paddle
-          audio.playScore();
-          spawnParticles(state.ballX, pTop, '#ff007f', 12);
+          if (state.isGlueActive) {
+            state.isBallAttached = true;
+          } else {
+            // Reflect ball based on where it hit the paddle
+            const hitPosition = (state.ballX - state.paddleX) / (currentPaddleW / 2); // -1.0 to 1.0
+            const bounceAngle = hitPosition * (Math.PI / 3.2); 
+            state.ballDx = state.ballSpeed * Math.sin(bounceAngle);
+            state.ballDy = -state.ballSpeed * Math.cos(bounceAngle);
+            state.ballY = pTop - state.ballRadius;
+            audio.playScore();
+            // Removed particle spawn to avoid residual dots
+          }
         }
 
         // Collision: Brick breakdown
@@ -308,133 +392,220 @@ export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             const bh = brick.height;
             const r = state.ballRadius;
 
-            // Simple box-circle collision approximation
             if (
               state.ballX + r >= bx &&
               state.ballX - r <= bx + bw &&
               state.ballY + r >= by &&
               state.ballY - r <= by + bh
             ) {
-              brick.alive = false;
-              brickHit = true;
-              spawnParticles(bx + bw / 2, by + bh / 2, brick.color, 18);
-              audio.playScore();
-              setScore(s => s + brick.points);
+              brick.hitsRemaining -= 1;
+              if (brick.hitsRemaining <= 0) {
+                brick.alive = false;
+                brickHit = true;
+                // Removed particle spawn to avoid residual dots
+                audio.playScore();
+                setScore(s => s + brick.points);
+                
+                // Spawn Powerup (3% chance)
+                if (Math.random() < 0.05) {
+                  const types: ('large' | 'glue' | 'gun' | 'ghost')[] = ['large', 'glue', 'gun', 'ghost'];
+                  state.powerUps.push({
+                    id: Date.now(),
+                    x: bx + bw / 2,
+                    y: by + bh / 2,
+                    type: types[Math.floor(Math.random() * types.length)],
+                    color: '#fff',
+                    spawnTime: Date.now()
+                  });
+                }
+              } else {
+                // Dim hard brick color
+                brick.color = '#555';
+              }
 
-              // Determine bounce reflection side (left/right vs top/bottom)
+              if (!state.isGhostActive) {
               const fromLeft = state.ballX - state.ballDx <= bx;
               const fromRight = state.ballX - state.ballDx >= bx + bw;
-              const fromTop = state.ballY - state.ballDy <= by;
-              const fromBottom = state.ballY - state.ballDy >= by + bh;
-
-              if (fromLeft || fromRight) {
-                state.ballDx = -state.ballDx;
-              } else if (fromTop || fromBottom) {
-                state.ballDy = -state.ballDy;
-              } else {
-                // fallback
-                state.ballDy = -state.ballDy;
-              }
+              if (fromLeft || fromRight) state.ballDx = -state.ballDx;
+              else state.ballDy = -state.ballDy;
+            }
             }
           }
         });
 
         // Check level clear
         const activeBricks = state.bricks.filter(b => b.alive);
-        if (activeBricks.length === 0) {
-          setLevel(l => {
-            const nextL = l + 1;
-            audio.playPowerUp();
-            setTimeout(() => {
-              initGame();
-            }, 600);
-            return nextL;
-          });
+        if (activeBricks.length === 0 && !state.isTransitioning) {
+          state.isTransitioning = true;
+          audio.playPowerUp();
+          setLevel(l => l + 1);
+          setTimeout(() => {
+            initGame(level + 1);
+          }, 600);
         }
       }
 
-      // Update particles
-      state.particles.forEach(p => {
-        p.x += p.dx;
-        p.y += p.dy;
-        p.life -= 1;
+      // Update Powerups
+      state.powerUps.forEach((p, idx) => {
+        p.y += 2;
+        // Collision with paddle
+        const pTop = CANVAS_HEIGHT - 30 - state.paddleHeight;
+          if (p.y >= pTop && p.x >= state.paddleX - currentPaddleW / 2 && p.x <= state.paddleX + currentPaddleW / 2) {
+            // Deactivate any previously active power‑up
+            Object.keys(state.activePowerUps).forEach(key => {
+              state.activePowerUps[key] = 0;
+            });
+            state.activePowerUps[p.type] = Date.now() + 15000;
+            state.powerUps.splice(idx, 1);
+            audio.playPowerUp();
+          } else if (p.y > CANVAS_HEIGHT) {
+            state.powerUps.splice(idx, 1);
+          }
       });
-      state.particles = state.particles.filter(p => p.life > 0);
+
+      // Update bullets
+      state.bullets.forEach((b, bIdx) => {
+        // Move bullet
+        b.y += b.dy;
+        // Remove bullet if off-screen
+        if (b.y < 0) {
+          state.bullets.splice(bIdx, 1);
+          return;
+        }
+        // Collision with bricks
+        state.bricks.forEach(brick => {
+          if (!brick.alive) return;
+          const bx = brick.x;
+          const by = brick.y;
+          const bw = brick.width;
+          const bh = brick.height;
+          const r = 4; // bullet radius
+          if (
+            b.x + r >= bx &&
+            b.x - r <= bx + bw &&
+            b.y + r >= by &&
+            b.y - r <= by + bh
+          ) {
+            // Hit brick
+            brick.hitsRemaining -= 1;
+            if (brick.hitsRemaining <= 0) {
+              brick.alive = false;
+              spawnParticles(bx + bw / 2, by + bh / 2, brick.color, 18);
+              audio.playScore();
+              setScore(s => s + brick.points);
+              // Possibly spawn powerup
+              if (Math.random() < 0.05) {
+                const types: ('large' | 'glue' | 'gun' | 'ghost')[] = ['large', 'glue', 'gun', 'ghost'];
+                state.powerUps.push({
+                  id: Date.now(),
+                  x: bx + bw / 2,
+                  y: by + bh / 2,
+                  type: types[Math.floor(Math.random() * types.length)],
+                  color: '#fff',
+                  spawnTime: Date.now(),
+                });
+              }
+            } else {
+              // Dim hard brick color
+              brick.color = '#555';
+            }
+            // Remove bullet after hit
+            state.bullets.splice(bIdx, 1);
+          }
+        });
+      });
+
+      // After processing bullets, check if level cleared
+      const activeBricksAfterBullets = state.bricks.filter(b => b.alive);
+      if (activeBricksAfterBullets.length === 0 && !state.isTransitioning) {
+        state.isTransitioning = true;
+        audio.playPowerUp();
+        setLevel(l => l + 1);
+        setTimeout(() => {
+          initGame(level + 1);
+        }, 600);
+      }
     };
 
     const drawGame = () => {
       const state = stateRef.current;
-      
-      // Clean canvas
       ctx.fillStyle = '#060410';
       ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-      // Draw background borders grid
+      // Draw Grid
       ctx.strokeStyle = 'rgba(0, 240, 255, 0.05)';
-      ctx.lineWidth = 1;
-      for (let x = 0; x < CANVAS_WIDTH; x += 40) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, CANVAS_HEIGHT);
-        ctx.stroke();
-      }
-      for (let y = 0; y < CANVAS_HEIGHT; y += 40) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(CANVAS_WIDTH, y);
-        ctx.stroke();
-      }
+      for (let x = 0; x < CANVAS_WIDTH; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CANVAS_HEIGHT); ctx.stroke(); }
+      for (let y = 0; y < CANVAS_HEIGHT; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CANVAS_WIDTH, y); ctx.stroke(); }
 
-      // Draw Level indicators
+      // Draw Level
       ctx.fillStyle = '#5e5975';
       ctx.font = '10px "Press Start 2P"';
       ctx.fillText(`LEVEL: ${level}`, 20, CANVAS_HEIGHT - 20);
 
-      // Draw Bricks
-      state.bricks.forEach(brick => {
-        if (!brick.alive) return;
-        ctx.fillStyle = brick.color;
-        
-        // Draw brick box with neon shadows
-        ctx.fillRect(brick.x, brick.y, brick.width, brick.height);
-        
-        // Internal brick highlight line
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-        ctx.fillRect(brick.x + 2, brick.y + 2, brick.width - 4, 3);
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
-        ctx.fillRect(brick.x + 2, brick.y + brick.height - 5, brick.width - 4, 3);
-      });
+        // Draw Bricks
+        state.bricks.forEach(brick => {
+          if (!brick.alive) return;
+          if (brick.hitsRemaining > 1) {
+            // Hard brick gradient
+            const grad = ctx.createLinearGradient(brick.x, brick.y, brick.x + brick.width, brick.y + brick.height);
+            grad.addColorStop(0, '#ff0080');
+            grad.addColorStop(1, '#ff66c4');
+            ctx.fillStyle = grad;
+          } else {
+            ctx.fillStyle = brick.color;
+          }
+          ctx.fillRect(brick.x, brick.y, brick.width, brick.height);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+          ctx.fillRect(brick.x + 2, brick.y + 2, brick.width - 4, 3);
+        });
 
-      // Draw Paddle (Neon glowing bar)
+      // Draw Paddle
+      const currentPaddleW = state.isLargeBarActive ? 160 : state.paddleWidth;
       const pTop = CANVAS_HEIGHT - 30 - state.paddleHeight;
-      const pLeft = state.paddleX - state.paddleWidth / 2;
-      ctx.fillStyle = '#ff007f'; // neon magenta paddle
+      const pLeft = state.paddleX - currentPaddleW / 2;
+      ctx.fillStyle = state.isGlueActive ? '#ffb700' : '#ff007f';
       ctx.shadowBlur = 10;
-      ctx.shadowColor = '#ff007f';
-      ctx.fillRect(pLeft, pTop, state.paddleWidth, state.paddleHeight);
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.fillRect(pLeft, pTop, currentPaddleW, state.paddleHeight);
       ctx.shadowBlur = 0;
-      
-      // Paddle details
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(pLeft + 4, pTop + 2, state.paddleWidth - 8, 3);
 
-      // Draw Ball Trail
-      state.ballTrail.forEach((t, index) => {
-        const opacity = (index + 1) / (state.ballTrail.length + 1) * 0.45;
-        ctx.fillStyle = `rgba(0, 240, 255, ${opacity})`;
+      // Visual gun icons on paddle when gun power‑up active
+      if (state.isGunActive) {
+        ctx.fillStyle = '#00ff00'; // gun colour
+        const gunWidth = 8;
+        const gunHeight = 12;
+        // Left gun near left edge
+        ctx.fillRect(pLeft + 6, pTop - gunHeight, gunWidth, gunHeight);
+        // Right gun near right edge
+        ctx.fillRect(pLeft + currentPaddleW - gunWidth - 6, pTop - gunHeight, gunWidth, gunHeight);
+      }
+
+      // Draw PowerUps
+      state.powerUps.forEach(p => {
+        ctx.fillStyle = p.type === 'large' ? '#ff00ff' : p.type === 'glue' ? '#ffb700' : p.type === 'gun' ? '#00ff00' : p.type === 'ghost' ? '#ff8800' : '#ff8800';
         ctx.beginPath();
-        ctx.arc(t.x, t.y, state.ballRadius * 0.8, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, 8, 0, Math.PI * 2);
         ctx.fill();
       });
 
       // Draw Ball
-      ctx.fillStyle = '#00f0ff'; // Neon Cyan
+      ctx.fillStyle = state.isGhostActive ? '#ff8800' : '#00f0ff';
       ctx.shadowBlur = 12;
       ctx.shadowColor = '#00f0ff';
       ctx.beginPath();
       ctx.arc(state.ballX, state.ballY, state.ballRadius, 0, Math.PI * 2);
       ctx.fill();
       ctx.shadowBlur = 0;
+
+      // Draw Bullets (if gun active)
+      if (state.isGunActive) {
+        state.bullets.forEach(b => {
+          ctx.fillStyle = '#fffb00'; // bright projectile colour
+          ctx.beginPath();
+          ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
 
       // Draw Particles
       state.particles.forEach(p => {

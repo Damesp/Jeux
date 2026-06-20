@@ -42,6 +42,17 @@ interface Particle {
   life: number;
 }
 
+interface Pedestrian {
+  id: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  dx: number;
+  type: 'human' | 'dog';
+  alive: boolean;
+}
+
 export const CarRace: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
@@ -66,10 +77,13 @@ export const CarRace: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     obstacles: [] as ObstacleCar[],
     coins: [] as Coin[],
     particles: [] as Particle[],
+    pedestrians: [] as Pedestrian[],
     lastObstacleSpawnTime: 0,
     lastCoinSpawnTime: 0,
+    lastPedestrianSpawnTime: 0,
     obstacleIdCounter: 0,
     coinIdCounter: 0,
+    pedestrianIdCounter: 0,
     scoreTimer: 0,
   });
 
@@ -94,8 +108,10 @@ export const CarRace: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     state.obstacles = [];
     state.coins = [];
     state.particles = [];
+    state.pedestrians = [];
     state.lastObstacleSpawnTime = 0;
     state.lastCoinSpawnTime = 0;
+    state.lastPedestrianSpawnTime = 0;
     state.scoreTimer = 0;
   };
 
@@ -317,6 +333,28 @@ export const CarRace: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         state.lastCoinSpawnTime = now;
       }
 
+      // Spawn Pedestrians
+      if (now - state.lastPedestrianSpawnTime > 3000) { // check every 3 seconds
+        if (Math.random() < 0.5) { // 50% chance
+          const isLeft = Math.random() > 0.5;
+          const type = Math.random() > 0.7 ? 'dog' : 'human';
+          const dx = (Math.random() * 1.5 + 1) * (isLeft ? 1 : -1);
+          
+          state.pedestrianIdCounter += 1;
+          state.pedestrians.push({
+            id: state.pedestrianIdCounter,
+            x: isLeft ? ROAD_LEFT - 30 : ROAD_LEFT + ROAD_WIDTH + 30,
+            y: -50 - Math.random() * 100,
+            width: type === 'dog' ? 24 : 16,
+            height: type === 'dog' ? 12 : 16,
+            dx,
+            type,
+            alive: true,
+          });
+        }
+        state.lastPedestrianSpawnTime = now;
+      }
+
       // Update Obstacle Cars
       state.obstacles = state.obstacles.filter(obs => {
         // Obstacles travel downwards relative to the scrolling road
@@ -399,6 +437,37 @@ export const CarRace: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         }
         
         return coin.y < CANVAS_HEIGHT + 100;
+      });
+
+      // Update Pedestrians
+      state.pedestrians = state.pedestrians.filter(p => {
+        if (!p.alive) return false;
+        
+        p.x += p.dx;
+        p.y += currentScrollSpeed;
+
+        // Check collision with Player
+        const px = state.playerX - state.playerWidth / 2;
+        const py = state.playerY - state.playerHeight / 2;
+        const ox = p.x - p.width / 2;
+        const oy = p.y - p.height / 2;
+
+        if (
+          px < ox + p.width &&
+          px + state.playerWidth > ox &&
+          py < oy + p.height &&
+          py + state.playerHeight > oy
+        ) {
+          // Hit pedestrian
+          p.alive = false;
+          spawnExplosion(p.x, p.y, '#ff0000', 30);
+          audio.playExplosion();
+          
+          setScore(s => Math.max(0, s - 100));
+          return false;
+        }
+
+        return p.y < CANVAS_HEIGHT + 100 && p.x > -100 && p.x < CANVAS_WIDTH + 100;
       });
 
       // Update particles
@@ -576,6 +645,49 @@ export const CarRace: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       // Reset text alignment
       ctx.textAlign = 'left';
       ctx.textBaseline = 'alphabetic';
+
+      // Draw Pedestrians
+      state.pedestrians.forEach(p => {
+        if (!p.alive) return;
+        if (p.type === 'human') {
+          // Draw Human (Top down)
+          ctx.fillStyle = '#00ff88'; // Neon green
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = '#00ff88';
+          
+          // Head
+          ctx.beginPath();
+          ctx.arc(p.x, p.y - 4, 6, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Shoulders/Body
+          ctx.fillRect(p.x - p.width / 2, p.y, p.width, p.height / 2);
+          
+          ctx.shadowBlur = 0;
+        } else {
+          // Draw Dog (Top down)
+          ctx.fillStyle = '#ffaa00'; // Neon orange
+          ctx.shadowBlur = 8;
+          ctx.shadowColor = '#ffaa00';
+          
+          // Dog body
+          const bodyW = p.width;
+          const bodyH = p.height;
+          ctx.fillRect(p.x - bodyW / 2, p.y - bodyH / 2, bodyW, bodyH);
+          
+          // Dog head (front)
+          const headX = p.dx > 0 ? p.x + bodyW / 2 : p.x - bodyW / 2;
+          ctx.beginPath();
+          ctx.arc(headX, p.y, 5, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Tail (back)
+          const tailX = p.dx > 0 ? p.x - bodyW / 2 - 4 : p.x + bodyW / 2;
+          ctx.fillRect(tailX, p.y - 1, 4, 2);
+          
+          ctx.shadowBlur = 0;
+        }
+      });
 
       // Draw Player Car
       if (state.gameState !== 'gameover') {
