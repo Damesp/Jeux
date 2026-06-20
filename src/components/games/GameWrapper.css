@@ -1,0 +1,281 @@
+.game-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 850px;
+  margin: 0 auto;
+  /* Allow the page to scroll so the instructions card is always reachable */
+  min-height: 100vh;
+  padding-bottom: 24px;
+}
+
+.game-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 15px 20px;
+  margin-bottom: 10px;
+  border-bottom: 2px solid rgba(0, 240, 255, 0.1);
+}
+
+.game-title-container {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.game-back-btn {
+  background: transparent;
+  border: 1px solid var(--text-muted);
+  color: var(--text-secondary);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.game-back-btn:hover {
+  border-color: var(--neon-magenta);
+  color: var(--neon-magenta);
+  box-shadow: 0 0 8px rgba(255, 0, 127, 0.3);
+}
+
+.game-header h2 {
+  margin: 0;
+  font-family: var(--font-cyber);
+  font-size: 20px;
+  letter-spacing: 1px;
+}
+
+.game-header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.game-action-btn {
+  background: rgba(30, 25, 60, 0.4);
+  border: 1px solid var(--text-muted);
+  color: var(--text-primary);
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.game-action-btn:hover {
+  border-color: var(--neon-cyan);
+  color: var(--neon-cyan);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+}
+
+.game-screen-container {
+  position: relative;
+  width: 100%;
+  border-radius: 12px;
+  border: 3px solid #1a172e;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 20px rgba(0, 240, 255, 0.1);
+  overflow: hidden;
+  background: #000;
+}
+
+.game-screen-container.active-border-magenta {
+  border-color: rgba(255, 0, 127, 0.6);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 20px rgba(255, 0, 127, 0.2);
+}
+
+.game-screen-container.active-border-cyan {
+  border-color: rgba(0, 240, 255, 0.6);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 20px rgba(0, 240, 255, 0.2);
+}
+
+.game-screen-container.active-border-green {
+  border-color: rgba(57, 255, 20, 0.6);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 20px rgba(57, 255, 20, 0.2);
+}
+
+.game-canvas {
+  width: 100%;
+  height: auto;
+  max-height: 70vh;
+  object-fit: contain;
+  display: block;
+}
+
+/* HUD Panel Overlay top */
+.game-hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.85) 70%, transparent);
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  color: #fff;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.hud-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hud-label {
+  color: var(--text-secondary);
+}
+
+.hud-value {
+  color: var(--neon-green);
+  text-shadow: 0 0 5px rgba(57, 255, 20, 0.5);
+}
+
+.hud-lives {
+  display: flex;
+  gap: 5px;
+  color: var(--neon-magenta);
+  text-shadow: 0 0 5px rgba(255, 0, 127, 0.5);
+  font-size: 14px;
+}
+
+/* Play/Pause/GameOver Screens overlays */
+.game-overlay {
+  /* Absolute within .game-screen-container — covers the canvas only */
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 8, 22, 0.88);
+  backdrop-filter: blur(4px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 8;
+  padding: 20px;
+  overflow-y: auto;
+}
+
+.game-overlay h3 {
+  font-family: var(--font-pixel);
+  font-size: 28px;
+  margin: 0 0 20px;
+  text-align: center;
+}
+
+.game-overlay p {
+  color: var(--text-secondary);
+  margin-bottom: 25px;
+  text-align: center;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.overlay-stats {
+  display: flex;
+  gap: 30px;
+  margin-bottom: 30px;
+  font-family: var(--font-pixel);
+  font-size: 14px;
+}
+
+.overlay-stat-val {
+  color: var(--neon-cyan);
+  text-shadow: 0 0 5px rgba(0, 240, 255, 0.5);
+}
+
+/* Instruction manual bottom card */
+.game-instructions-card {
+  width: 100%;
+  max-height: 30vh;
+  overflow-y: auto;
+  margin-top: 25px;
+  padding: 20px;
+  border-radius: 12px;
+}
+
+.instr-title {
+  font-family: var(--font-cyber);
+  font-size: 16px;
+  color: var(--neon-cyan);
+  margin: 0 0 15px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.instr-layout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 600px) {
+  .instr-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.instr-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.instr-list li {
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.instr-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--neon-magenta);
+  border-radius: 50%;
+  box-shadow: 0 0 4px var(--neon-magenta);
+}
+
+.keycaps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.key-row {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.keycap {
+  background: linear-gradient(180deg, #2e284a 0%, #17132a 100%);
+  border: 1px solid #4a3e7a;
+  border-bottom: 3px solid #100b21;
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-family: var(--font-pixel);
+  font-size: 9px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  min-width: 32px;
+  text-align: center;
+}
+
+.key-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
