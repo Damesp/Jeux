@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import './App.css';
-import GameWrapper from './components/games/GameWrapper';
 import SpaceInvaders from './components/games/SpaceInvaders';
 import CarRace from './components/games/CarRace';
 import Breakout from './components/games/Breakout';

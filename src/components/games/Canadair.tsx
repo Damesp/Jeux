@@ -317,7 +317,6 @@ export const Canadair: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       }
 
       // Check plane vs flame collision (game over condition)
-      const planeCenterY = state.planeY + PLANE_HEIGHT / 2;
       const planeBottom = state.planeY + PLANE_HEIGHT;
       const planeLeft = state.planeX;
       const planeRight = state.planeX + PLANE_WIDTH;

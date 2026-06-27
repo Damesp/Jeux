@@ -158,8 +158,8 @@ const chooseGhostDir = (
     targetRow = pacRow;
     let bestDir = dir;
     let bestDist = -Infinity;
-    const isGhostHouseDoorAllowed = ghost.mode === 'dead' || (row >= 13 && row <= 15);
-    
+    const isGhostHouseDoorAllowed = (row >= 13 && row <= 15);
+
     for (const d of [DIRS.UP, DIRS.LEFT, DIRS.DOWN, DIRS.RIGHT]) {
       const nc = col + d.x;
       const nr = row + d.y;
@@ -171,14 +171,14 @@ const chooseGhostDir = (
         bestDir = d;
       }
     }
-    
+
     if (bestDist === -Infinity) {
-       for (const d of [DIRS.UP, DIRS.LEFT, DIRS.DOWN, DIRS.RIGHT]) {
-          const nc = col + d.x;
-          const nr = row + d.y;
-          if (!isWalkable(maze, nc, nr, isGhostHouseDoorAllowed)) continue;
-          bestDir = d;
-       }
+      for (const d of [DIRS.UP, DIRS.LEFT, DIRS.DOWN, DIRS.RIGHT]) {
+        const nc = col + d.x;
+        const nr = row + d.y;
+        if (!isWalkable(maze, nc, nr, isGhostHouseDoorAllowed)) continue;
+        bestDir = d;
+      }
     }
     return bestDir;
   } else if (ghost.mode === 'dead') {
@@ -477,7 +477,7 @@ export const Pacman: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         const gDx = g.px - ghostCenter.px;
         const gDy = g.py - ghostCenter.py;
 
-        const speed = g.mode === 'frightened' ? 0.6 : g.mode === 'dead' ? 2.0 : 1.0 + gi * 0.05;
+        const speed = g.mode === 'frightened' ? 0.6 : 1.0 + gi * 0.05;
         g.px += g.dir.x * speed;
         g.py += g.dir.y * speed;
 
@@ -577,8 +577,6 @@ export const Pacman: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       const mouthAngle = s.pacMouthAngle * Math.PI;
 
       // Rotation based on direction
-      let startAngle = mouthAngle;
-      let endAngle = Math.PI * 2 - mouthAngle;
       let rotation = 0;
       if (s.pacDir === DIRS.RIGHT || s.pacDir === DIRS.NONE) rotation = 0;
       else if (s.pacDir === DIRS.DOWN) rotation = Math.PI / 2;
