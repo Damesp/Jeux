@@ -40,9 +40,6 @@ interface PowerUp {
 export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(() => {
-    return parseInt(localStorage.getItem('breakout_highscore') || '0', 10);
-  });
   const [lives, setLives] = useState(3);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'paused' | 'gameover'>('idle');
   const [level, setLevel] = useState(1);
@@ -76,13 +73,6 @@ export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     isTransitioning: false,
   });
 
-  // Track high score
-  useEffect(() => {
-    if (score > highScore) {
-      setHighScore(score);
-      localStorage.setItem('breakout_highscore', score.toString());
-    }
-  }, [score, highScore]);
 
   useEffect(() => {
     stateRef.current.gameState = gameState;
@@ -632,7 +622,7 @@ export const Breakout: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       title="BREAKOUT ARCADE"
       themeColor="magenta"
       score={score}
-      highScore={highScore}
+      gameId="breakout"
       lives={lives}
       gameState={gameState}
       onStart={startGame}

@@ -56,9 +56,6 @@ interface Pedestrian {
 export const CarRace: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(() => {
-    return parseInt(localStorage.getItem('car_race_highscore') || '0', 10);
-  });
   const [lives, setLives] = useState(3);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'paused' | 'gameover'>('idle');
   const [speedKmh, setSpeedKmh] = useState(120);
@@ -87,13 +84,6 @@ export const CarRace: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     scoreTimer: 0,
   });
 
-  // Keep track of high score
-  useEffect(() => {
-    if (score > highScore) {
-      setHighScore(score);
-      localStorage.setItem('car_race_highscore', score.toString());
-    }
-  }, [score, highScore]);
 
   useEffect(() => {
     stateRef.current.gameState = gameState;
@@ -718,7 +708,7 @@ export const CarRace: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       title="SIMPLE CAR RACE"
       themeColor="cyan"
       score={score}
-      highScore={highScore}
+      gameId="car_race"
       lives={lives}
       gameState={gameState}
       onStart={startGame}

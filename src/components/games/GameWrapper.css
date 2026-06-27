@@ -279,3 +279,54 @@
   font-size: 13px;
   color: var(--text-secondary);
 }
+
+.highscore-input-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+  background: rgba(30, 25, 60, 0.4);
+  padding: 15px 25px;
+  border-radius: 8px;
+  border: 1px dashed rgba(0, 240, 255, 0.3);
+}
+
+.congrats-text {
+  font-family: var(--font-pixel);
+  font-size: 11px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.input-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.highscore-input {
+  background: #0d0a1b;
+  border: 2px solid var(--neon-cyan);
+  border-radius: 4px;
+  color: #fff;
+  padding: 8px 12px;
+  font-family: var(--font-pixel);
+  font-size: 16px;
+  width: 100px;
+  text-align: center;
+  text-transform: uppercase;
+  outline: none;
+  box-shadow: 0 0 5px rgba(0, 240, 255, 0.2);
+}
+
+.highscore-input:focus {
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.6);
+  border-color: #fff;
+}
+
+.highscore-input-container .save-btn {
+  padding: 8px 16px;
+  height: 40px;
+}
+

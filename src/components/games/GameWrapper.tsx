@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Volume2, VolumeX, Pause, Play, RotateCcw, Home } from 'lucide-react';
 import { audio } from '../../utils/audio';
 import './GameWrapper.css';
@@ -12,7 +12,8 @@ interface GameWrapperProps {
   title: string;
   themeColor: 'cyan' | 'magenta' | 'green';
   score: number;
-  highScore: number;
+  highScore?: number; // legacy prop
+  gameId: string; // The ID of the game to fetch high score
   lives: number | null;
   gameState: 'idle' | 'playing' | 'paused' | 'gameover';
   onStart: () => void;
@@ -28,7 +29,7 @@ export const GameWrapper: React.FC<GameWrapperProps> = ({
   title,
   themeColor,
   score,
-  highScore,
+  gameId,
   lives,
   gameState,
   onStart,
@@ -40,10 +41,75 @@ export const GameWrapper: React.FC<GameWrapperProps> = ({
   children,
 }) => {
   const [isMuted, setIsMuted] = useState(audio.getMuteStatus());
+  const [highScoresData, setHighScoresData] = useState<Record<string, { name: string; score: number }>>({});
+  const [playerName, setPlayerName] = useState('');
+  const [hasSaved, setHasSaved] = useState(false);
+
+  // Fetch high scores on mount and when gameId changes
+  useEffect(() => {
+    fetch('/api/highscores')
+      .then(res => res.json())
+      .then(data => {
+        setHighScoresData(data || {});
+      })
+      .catch(() => {
+        // fallback to localStorage if api is unavailable
+        try {
+          const localVal = localStorage.getItem(`${gameId}_highscore`);
+          const localName = localStorage.getItem(`${gameId}_highscore_name`) || 'AAA';
+          if (localVal) {
+            setHighScoresData(prev => ({
+              ...prev,
+              [gameId]: { name: localName, score: parseInt(localVal, 10) }
+            }));
+          }
+        } catch (e) {}
+      });
+  }, [gameId]);
+
+  // Reset name-saving state on game start/restart
+  useEffect(() => {
+    if (gameState === 'playing' || gameState === 'idle') {
+      setHasSaved(false);
+      setPlayerName('');
+    }
+  }, [gameState]);
 
   const handleMuteToggle = () => {
     const nextMute = audio.toggleMute();
     setIsMuted(nextMute);
+  };
+
+  const currentHighScoreEntry = highScoresData[gameId] || { name: 'AAA', score: 0 };
+  const isNewHighScore = score > currentHighScoreEntry.score;
+
+  const handleSaveHighScore = () => {
+    const finalName = playerName.trim().toUpperCase() || 'AAA';
+    fetch('/api/highscores', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ game: gameId, name: finalName, score })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && data.highscores) {
+          setHighScoresData(data.highscores);
+        }
+      })
+      .catch(() => {
+        // Fallback write to localStorage
+        try {
+          localStorage.setItem(`${gameId}_highscore`, score.toString());
+          localStorage.setItem(`${gameId}_highscore_name`, finalName);
+          setHighScoresData(prev => ({
+            ...prev,
+            [gameId]: { name: finalName, score }
+          }));
+        } catch (e) {}
+      })
+      .finally(() => {
+        setHasSaved(true);
+      });
   };
 
   const getBorderClass = () => {
@@ -113,7 +179,7 @@ export const GameWrapper: React.FC<GameWrapperProps> = ({
             
             <div className="hud-item">
               <span className="hud-label">HIGH SCORE</span>
-              <span className="hud-value">{highScore}</span>
+              <span className="hud-value">{currentHighScoreEntry.score} ({currentHighScoreEntry.name})</span>
             </div>
           </div>
 
@@ -146,11 +212,31 @@ export const GameWrapper: React.FC<GameWrapperProps> = ({
               <h3 className="neon-text-magenta">GAME OVER</h3>
               <div className="overlay-stats">
                 <div>FINAL SCORE: <span className="overlay-stat-val">{score}</span></div>
-                <div>HIGH SCORE: <span className="overlay-stat-val">{highScore}</span></div>
+                <div>HIGH SCORE: <span className="overlay-stat-val">{currentHighScoreEntry.score} ({currentHighScoreEntry.name})</span></div>
               </div>
-              <button className="neon-btn neon-btn-magenta" onClick={onRestart}>
-                <RotateCcw size={18} /> PLAY AGAIN
-              </button>
+              
+              {isNewHighScore && !hasSaved ? (
+                <div className="highscore-input-container">
+                  <div className="congrats-text neon-text-cyan">NEW HIGH SCORE! CONGRATULATIONS!</div>
+                  <div className="input-row">
+                    <input
+                      type="text"
+                      maxLength={3}
+                      placeholder="AAA"
+                      value={playerName}
+                      onChange={(e) => setPlayerName(e.target.value.toUpperCase())}
+                      className="highscore-input"
+                    />
+                    <button className="neon-btn neon-btn-cyan save-btn" onClick={handleSaveHighScore}>
+                      SAVE
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button className="neon-btn neon-btn-magenta" onClick={onRestart}>
+                  <RotateCcw size={18} /> PLAY AGAIN
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -188,4 +274,5 @@ export const GameWrapper: React.FC<GameWrapperProps> = ({
     </div>
   );
 };
+
 export default GameWrapper;

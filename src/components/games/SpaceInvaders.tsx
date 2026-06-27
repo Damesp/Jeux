@@ -34,9 +34,6 @@ interface Particle {
 export const SpaceInvaders: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(() => {
-    return parseInt(localStorage.getItem('space_invaders_highscore') || '0', 10);
-  });
   const [lives, setLives] = useState(3);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'paused' | 'gameover'>('idle');
   const [level, setLevel] = useState(1);
@@ -78,13 +75,6 @@ export const SpaceInvaders: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     stateRef.current.stars = stars;
   }, []);
 
-  // Update localStorage high score when score changes
-  useEffect(() => {
-    if (score > highScore) {
-      setHighScore(score);
-      localStorage.setItem('space_invaders_highscore', score.toString());
-    }
-  }, [score, highScore]);
 
   // Synchronize status state
   useEffect(() => {
@@ -514,7 +504,7 @@ export const SpaceInvaders: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       title="SPACE INVADERS"
       themeColor="green"
       score={score}
-      highScore={highScore}
+      gameId="space_invaders"
       lives={lives}
       gameState={gameState}
       onStart={startGame}

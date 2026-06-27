@@ -212,9 +212,6 @@ export const Pacman: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(() =>
-    parseInt(localStorage.getItem('pacman_highscore') || '0', 10)
-  );
   const [lives, setLives] = useState(3);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'paused' | 'gameover'>('idle');
 
@@ -308,13 +305,6 @@ export const Pacman: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   // Sync react state → ref
   useEffect(() => { stateRef.current.gameState = gameState; }, [gameState]);
 
-  // High score tracking
-  useEffect(() => {
-    if (score > highScore) {
-      setHighScore(score);
-      localStorage.setItem('pacman_highscore', score.toString());
-    }
-  }, [score, highScore]);
 
   // Keyboard events
   useEffect(() => {
@@ -690,7 +680,7 @@ export const Pacman: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       title="PAC-MAN"
       themeColor="cyan"
       score={score}
-      highScore={highScore}
+      gameId="pacman"
       lives={lives}
       gameState={gameState}
       onStart={startGame}

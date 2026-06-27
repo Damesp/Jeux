@@ -43,9 +43,6 @@ interface Cloud {
 export const Canadair: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(() => {
-    return parseInt(localStorage.getItem('canadair_highscore') || '0', 10);
-  });
   const [lives, setLives] = useState(3);
   const [gameState, setGameState] = useState<'idle' | 'playing' | 'paused' | 'gameover'>('idle');
   const [level, setLevel] = useState(1);
@@ -76,13 +73,6 @@ export const Canadair: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     tick: 0,
   });
 
-  // High score tracking
-  useEffect(() => {
-    if (score > highScore) {
-      setHighScore(score);
-      localStorage.setItem('canadair_highscore', score.toString());
-    }
-  }, [score, highScore]);
 
   useEffect(() => {
     stateRef.current.gameState = gameState;
@@ -673,7 +663,7 @@ export const Canadair: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       title="CANADAIR RESCUE"
       themeColor="magenta"
       score={score}
-      highScore={highScore}
+      gameId="canadair"
       lives={lives}
       gameState={gameState}
       onStart={startGame}
