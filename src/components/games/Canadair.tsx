@@ -71,6 +71,9 @@ export const Canadair: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     isTransitioning: false,
     // Animation time
     tick: 0,
+    // Water Capacity & Refill
+    waterCapacity: 100,
+    lastRefillTime: null as number | null,
   });
 
 
@@ -88,8 +91,13 @@ export const Canadair: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     for (let i = 0; i < flameCount; i++) {
       const baseH = 40 + Math.random() * 20 + currentLevel * 15;
+      // Add random offset to spacing to make positions less uniform
+      const randomOffset = (Math.random() - 0.5) * (spacing * 0.75);
+      const targetX = 40 + i * spacing + spacing / 2 + randomOffset;
+      const clampedX = Math.max(40, Math.min(CANVAS_WIDTH - 40, targetX));
+
       flames.push({
-        x: 40 + i * spacing + spacing / 2,
+        x: clampedX,
         width: 28 + Math.random() * 12,
         baseHeight: baseH,
         currentHeight: baseH,
@@ -126,6 +134,8 @@ export const Canadair: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     state.dropCooldown = Math.max(300, 500 - currentLevel * 20);
     state.isTransitioning = false;
     state.tick = 0;
+    state.waterCapacity = 100;
+    state.lastRefillTime = null;
     initFlames(currentLevel);
     initClouds();
   };
@@ -231,15 +241,40 @@ export const Canadair: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         state.planeY += state.rowHeight;
       }
 
+      // Refill logic (X to refill)
+      if ((state.keys['x'] || state.keys['X']) && !state.keys[' ']) {
+        const now = Date.now();
+        if (!state.lastRefillTime) {
+          state.lastRefillTime = now;
+        }
+        const dt = (now - state.lastRefillTime) / 1000;
+        state.lastRefillTime = now;
+        // Refill takes 4 seconds on level 1, increasing up to 8 seconds at level 6+
+        const refillDuration = Math.min(8, 4 + (level - 1) * 0.8);
+        state.waterCapacity = Math.min(100, state.waterCapacity + dt * (100 / refillDuration));
+        
+        // Spawn mist/steam particles indicating refilling
+        if (state.tick % 6 === 0 && state.waterCapacity < 100) {
+          spawnParticles(state.planeX + PLANE_WIDTH / 2, state.planeY + PLANE_HEIGHT + 4, 'rgba(150, 220, 255, 0.6)', 1);
+        }
+      } else {
+        state.lastRefillTime = null;
+      }
+
       // Drop water on spacebar
       if (state.keys[' ']) {
         const now = Date.now();
         if (now - state.lastDropTime >= state.dropCooldown) {
-          state.lastDropTime = now;
-          const dropX = state.planeX + PLANE_WIDTH / 2;
-          const dropY = state.planeY + PLANE_HEIGHT;
-          state.waterDrops.push({ x: dropX, y: dropY, dy: 4 });
-          audio.playLaser();
+          // Drops consume 5% on level 1, increasing up to 10% at level 6+
+          const waterCost = 5 + Math.min(5, level - 1);
+          if (state.waterCapacity >= waterCost) {
+            state.lastDropTime = now;
+            const dropX = state.planeX + PLANE_WIDTH / 2;
+            const dropY = state.planeY + PLANE_HEIGHT + 4;
+            state.waterDrops.push({ x: dropX, y: dropY, dy: 4 });
+            state.waterCapacity = Math.max(0, state.waterCapacity - waterCost);
+            audio.playLaser();
+          }
         }
       }
 
@@ -553,6 +588,27 @@ export const Canadair: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       ctx.closePath();
       ctx.fill();
 
+      // Visual Water Tank Pod under fuselage (centered)
+      ctx.fillStyle = '#778899'; // metallic gray strut
+      ctx.fillRect(px + PLANE_WIDTH / 2 - 8, py + PLANE_HEIGHT - 4, 16, 2);
+      
+      // Water tank pod container (blue with white outline/details)
+      ctx.fillStyle = '#1e88e5';
+      ctx.beginPath();
+      ctx.arc(px + PLANE_WIDTH / 2 - 10, py + PLANE_HEIGHT, 4, Math.PI/2, Math.PI * 1.5);
+      ctx.lineTo(px + PLANE_WIDTH / 2 + 10, py + PLANE_HEIGHT - 4);
+      ctx.arc(px + PLANE_WIDTH / 2 + 10, py + PLANE_HEIGHT, 4, Math.PI * 1.5, Math.PI/2);
+      ctx.lineTo(px + PLANE_WIDTH / 2 - 10, py + PLANE_HEIGHT + 4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Nozzle at bottom of tank
+      ctx.fillStyle = '#333333';
+      ctx.fillRect(px + PLANE_WIDTH / 2 - 3, py + PLANE_HEIGHT + 3, 6, 2);
+
       // Yellow belly
       ctx.fillStyle = '#ffcc00';
       ctx.beginPath();
@@ -622,28 +678,49 @@ export const Canadair: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       });
       ctx.globalAlpha = 1;
 
-      // ── Water cooldown indicator
-      const now = Date.now();
-      const elapsed = now - state.lastDropTime;
-      const cooldownPct = Math.min(1, elapsed / state.dropCooldown);
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-      ctx.fillRect(CANVAS_WIDTH - 120, 15, 100, 10);
-      ctx.fillStyle = cooldownPct >= 1 ? '#3399ff' : '#1a5588';
-      ctx.fillRect(CANVAS_WIDTH - 120, 15, 100 * cooldownPct, 10);
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.strokeRect(CANVAS_WIDTH - 120, 15, 100, 10);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '9px "Press Start 2P", monospace';
-      ctx.fillText('WATER', CANVAS_WIDTH - 120, 12);
-
       // ── Level indicator
       ctx.fillStyle = '#ffffff';
       ctx.font = '10px "Press Start 2P", monospace';
-      ctx.fillText(`LEVEL: ${level}`, 20, CANVAS_HEIGHT - 15);
+      ctx.fillText(`LEVEL: ${level}`, 20, CANVAS_HEIGHT - 38);
 
       // ── Flames remaining
       const remaining = state.flames.filter(f => f.alive).length;
-      ctx.fillText(`FIRES: ${remaining}`, 20, CANVAS_HEIGHT - 30);
+      ctx.fillText(`FIRES: ${remaining}`, 160, CANVAS_HEIGHT - 38);
+
+      // ── Water capacity bar
+      const capBarX = 20;
+      const capBarY = CANVAS_HEIGHT - 24;
+      const capBarW = CANVAS_WIDTH - 40;
+      const capBarH = 14;
+
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.fillRect(capBarX, capBarY, capBarW, capBarH);
+
+      const fillW = (state.waterCapacity / 100) * capBarW;
+      const blueGrad = ctx.createLinearGradient(capBarX, capBarY, capBarX, capBarY + capBarH);
+      blueGrad.addColorStop(0, '#33b5ff');
+      blueGrad.addColorStop(1, '#0066cc');
+      ctx.fillStyle = blueGrad;
+      ctx.fillRect(capBarX, capBarY, fillW, capBarH);
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(capBarX, capBarY, capBarW, capBarH);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '8px "Press Start 2P", monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`WATER TANK: ${Math.round(state.waterCapacity)}%`, CANVAS_WIDTH / 2, capBarY + 10);
+      ctx.textAlign = 'left';
+
+      // If refilling, show flashing indicator
+      if ((state.keys['x'] || state.keys['X']) && !state.keys[' '] && state.waterCapacity < 100) {
+        if (Math.floor(state.tick / 15) % 2 === 0) {
+          ctx.fillStyle = '#00ffcc';
+          ctx.font = '8px "Press Start 2P", monospace';
+          ctx.fillText('REFILLING...', capBarX + 10, capBarY + 10);
+        }
+      }
     };
 
     const loop = () => {
@@ -673,12 +750,14 @@ export const Canadair: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       instructions={[
         "A Canadair plane flies automatically across the sky in passes.",
         "Press Space to drop water on the flames below.",
+        "Each drop consumes water (5% on level 1). Press X to refill the tank (takes 4s on level 1).",
         "Each water drop shrinks a flame — extinguish all fires to clear the level.",
         "The plane descends with each pass — don't let it hit an active flame!",
-        "Higher levels bring taller, tougher flames that need more water.",
+        "Higher levels bring taller, tougher flames and slower tank refilling.",
       ]}
       controls={[
-        { keys: ['Spacebar'], description: 'Drop Water' },
+        { keys: ['Spacebar'], description: 'Drop Water (Consumes 5%-10%)' },
+        { keys: ['X'], description: 'Refill Water Tank (4s - 8s)' },
         { keys: ['Esc'], description: 'Pause / Resume' },
       ]}
     >
