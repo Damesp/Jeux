@@ -6,15 +6,17 @@ import Breakout from './components/games/Breakout';
 import Pacman from './components/games/Pacman';
 import Canadair from './components/games/Canadair';
 import Bomberman from './components/games/Bomberman';
+import FreeKick from './components/games/FreeKick';
 import SpaceInvadersImg from './assets/space_invaders_thumb.png';
 import CarRaceImg from './assets/car_race_thumb.png';
 import BreakoutImg from './assets/breakout_thumb.png';
 import PacmanImg from './assets/pacman_thumb.png';
 import CanadairImg from './assets/canadair_thumb.png';
 import BombermanImg from './assets/bomberman_thumb.png';
+import FreeKickImg from './assets/free_kick_thumb.png';
 
 // Simple enum for game selection
-type Game = '' | 'SpaceInvaders' | 'CarRace' | 'Breakout' | 'Pacman' | 'Canadair' | 'Bomberman';
+type Game = '' | 'SpaceInvaders' | 'CarRace' | 'Breakout' | 'Pacman' | 'Canadair' | 'Bomberman' | 'FreeKick';
 
 const GameEnum: Record<string, Game> = {
   None: '',
@@ -24,6 +26,7 @@ const GameEnum: Record<string, Game> = {
   Pacman: 'Pacman',
   Canadair: 'Canadair',
   Bomberman: 'Bomberman',
+  FreeKick: 'FreeKick',
 };
 
 function App() {
@@ -43,6 +46,8 @@ function App() {
         return <Canadair onBack={() => setSelectedGame(GameEnum.None)} />;
       case GameEnum.Bomberman:
         return <Bomberman onBack={() => setSelectedGame(GameEnum.None)} />;
+      case GameEnum.FreeKick:
+        return <FreeKick onBack={() => setSelectedGame(GameEnum.None)} />;
       default:
         return null;
     }
@@ -61,7 +66,8 @@ function App() {
         { name: 'Breakout', enum: GameEnum.Breakout, img: BreakoutImg },
         { name: 'Canadair', enum: GameEnum.Canadair, img: CanadairImg },
         { name: 'Pacman', enum: GameEnum.Pacman, img: PacmanImg },
-        { name: 'Bomberman', enum: GameEnum.Bomberman, img: BombermanImg }].map((g) => (
+        { name: 'Bomberman', enum: GameEnum.Bomberman, img: BombermanImg },
+        { name: 'Free Kick', enum: GameEnum.FreeKick, img: FreeKickImg }].map((g) => (
           <div key={g.name} className="game-tile" onClick={() => setSelectedGame(g.enum)}>
             <img src={g.img} alt={g.name} className="game-thumb" />
             <div className="game-label">{g.name}</div>
