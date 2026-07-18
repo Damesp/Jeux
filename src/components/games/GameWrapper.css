@@ -330,3 +330,58 @@
   height: 40px;
 }
 
+/* Leaderboard overlay */
+.leaderboard-overlay {
+  /* Sits above the idle/gameover overlays (z-index 8) */
+  z-index: 9;
+}
+
+.leaderboard-btn {
+  margin-top: 12px;
+}
+
+.leaderboard-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 25px;
+  width: 100%;
+  max-width: 340px;
+  font-family: var(--font-pixel);
+  font-size: 12px;
+}
+
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 36px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lb-rank {
+  color: var(--text-secondary);
+}
+
+.lb-name {
+  color: #fff;
+  letter-spacing: 2px;
+}
+
+.lb-score {
+  color: var(--neon-green);
+  text-shadow: 0 0 5px rgba(57, 255, 20, 0.5);
+  text-align: right;
+}
+
+.leaderboard-row-top {
+  background: rgba(255, 215, 0, 0.06);
+}
+
+.leaderboard-row-top .lb-rank,
+.leaderboard-row-top .lb-name,
+.leaderboard-row-top .lb-score {
+  color: #ffd700;
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.5);
+}
+

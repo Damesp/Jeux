@@ -10,9 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@vercel/blob": "^2.6.1",
+    "lucide-react": "^0.400.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6",
-    "lucide-react": "^0.400.0"
+    "react-dom": "^19.2.6"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

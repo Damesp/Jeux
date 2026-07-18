@@ -1,18 +1,14 @@
 {
-  "space_invaders": {
-    "name": "DAM",
-    "score": 3910
-  },
-  "car_race": {
-    "name": "DAM",
-    "score": 1371
-  },
-  "bomberman": {
-    "name": "TES",
-    "score": 260
-  },
-  "free_kick": {
-    "name": "PAU",
-    "score": 3700
-  }
+  "space_invaders": [
+    { "name": "DAM", "score": 3910 }
+  ],
+  "car_race": [
+    { "name": "DAM", "score": 1371 }
+  ],
+  "bomberman": [
+    { "name": "TES", "score": 260 }
+  ],
+  "free_kick": [
+    { "name": "PAU", "score": 3700 }
+  ]
 }

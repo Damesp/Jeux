@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { mergeScore, type LeaderboardMap } from './src/utils/leaderboardCore'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -11,6 +12,8 @@ const __dirname = path.dirname(__filename)
 export default defineConfig({
   plugins: [
     react(),
+    // Dev-only mirror of api/highscores.ts (the Vercel function used in
+    // production), backed by the local highscores.json file.
     {
       name: 'highscore-api',
       configureServer(server) {
@@ -33,26 +36,23 @@ export default defineConfig({
               try {
                 const data = JSON.parse(body);
                 const filePath = path.resolve(__dirname, 'highscores.json');
-                let highscores: Record<string, { name: string; score: number }> = {};
+                let highscores: LeaderboardMap = {};
                 if (fs.existsSync(filePath)) {
                   try {
                     highscores = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-                  } catch (e) {
+                  } catch {
                     highscores = {};
                   }
                 }
-                
+
                 const { game, name, score } = data;
-                if (game && name !== undefined && score !== undefined) {
-                  const current = highscores[game];
-                  if (!current || score > current.score) {
-                    highscores[game] = { name, score };
-                    fs.writeFileSync(filePath, JSON.stringify(highscores, null, 2), 'utf-8');
-                  }
+                if (typeof game === 'string' && typeof name === 'string' && typeof score === 'number') {
+                  highscores[game] = mergeScore(highscores[game] ?? [], { name, score });
+                  fs.writeFileSync(filePath, JSON.stringify(highscores, null, 2), 'utf-8');
                 }
                 res.setHeader('Content-Type', 'application/json');
                 res.end(JSON.stringify({ success: true, highscores }));
-              } catch (err) {
+              } catch {
                 res.statusCode = 500;
                 res.setHeader('Content-Type', 'application/json');
                 res.end(JSON.stringify({ error: 'Failed to save highscore' }));
@@ -66,4 +66,3 @@ export default defineConfig({
     }
   ],
 })
-

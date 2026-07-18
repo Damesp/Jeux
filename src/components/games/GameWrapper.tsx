@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Volume2, VolumeX, Pause, Play, RotateCcw, Home } from 'lucide-react';
+import { Volume2, VolumeX, Pause, Play, RotateCcw, Home, Trophy, X } from 'lucide-react';
 import { audio } from '../../utils/audio';
+import {
+  fetchLeaderboard,
+  qualifiesForLeaderboard,
+  submitScore,
+  type LeaderboardEntry,
+} from '../../utils/leaderboard';
 import './GameWrapper.css';
 
 interface ControlMap {
@@ -12,8 +18,7 @@ interface GameWrapperProps {
   title: string;
   themeColor: 'cyan' | 'magenta' | 'green';
   score: number;
-  highScore?: number; // legacy prop
-  gameId: string; // The ID of the game to fetch high score
+  gameId: string; // The ID of the game, used as leaderboard key
   lives: number | null;
   gameState: 'idle' | 'playing' | 'paused' | 'gameover';
   onStart: () => void;
@@ -41,30 +46,14 @@ export const GameWrapper: React.FC<GameWrapperProps> = ({
   children,
 }) => {
   const [isMuted, setIsMuted] = useState(audio.getMuteStatus());
-  const [highScoresData, setHighScoresData] = useState<Record<string, { name: string; score: number }>>({});
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [playerName, setPlayerName] = useState('');
   const [hasSaved, setHasSaved] = useState(false);
 
-  // Fetch high scores on mount and when gameId changes
+  // Fetch the shared leaderboard on mount and when gameId changes
   useEffect(() => {
-    fetch('/api/highscores')
-      .then(res => res.json())
-      .then(data => {
-        setHighScoresData(data || {});
-      })
-      .catch(() => {
-        // fallback to localStorage if api is unavailable
-        try {
-          const localVal = localStorage.getItem(`${gameId}_highscore`);
-          const localName = localStorage.getItem(`${gameId}_highscore_name`) || 'AAA';
-          if (localVal) {
-            setHighScoresData(prev => ({
-              ...prev,
-              [gameId]: { name: localName, score: parseInt(localVal, 10) }
-            }));
-          }
-        } catch (e) {}
-      });
+    fetchLeaderboard(gameId).then(setLeaderboard);
   }, [gameId]);
 
   // Reset name-saving state on game start/restart
@@ -80,36 +69,19 @@ export const GameWrapper: React.FC<GameWrapperProps> = ({
     setIsMuted(nextMute);
   };
 
-  const currentHighScoreEntry = highScoresData[gameId] || { name: 'AAA', score: 0 };
-  const isNewHighScore = score > currentHighScoreEntry.score;
+  const topEntry = leaderboard[0] ?? { name: 'AAA', score: 0 };
+  const isNewHighScore = qualifiesForLeaderboard(leaderboard, score);
 
-  const handleSaveHighScore = () => {
-    const finalName = playerName.trim().toUpperCase() || 'AAA';
-    fetch('/api/highscores', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ game: gameId, name: finalName, score })
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success && data.highscores) {
-          setHighScoresData(data.highscores);
-        }
-      })
-      .catch(() => {
-        // Fallback write to localStorage
-        try {
-          localStorage.setItem(`${gameId}_highscore`, score.toString());
-          localStorage.setItem(`${gameId}_highscore_name`, finalName);
-          setHighScoresData(prev => ({
-            ...prev,
-            [gameId]: { name: finalName, score }
-          }));
-        } catch (e) {}
-      })
-      .finally(() => {
-        setHasSaved(true);
-      });
+  const handleSaveHighScore = async () => {
+    const updated = await submitScore(gameId, playerName, score);
+    setLeaderboard(updated);
+    setHasSaved(true);
+  };
+
+  const handleOpenLeaderboard = () => {
+    setShowLeaderboard(true);
+    // Refresh in the background: someone else may have played meanwhile
+    fetchLeaderboard(gameId).then(setLeaderboard);
   };
 
   const getBorderClass = () => {
@@ -179,7 +151,7 @@ export const GameWrapper: React.FC<GameWrapperProps> = ({
             
             <div className="hud-item">
               <span className="hud-label">HIGH SCORE</span>
-              <span className="hud-value">{currentHighScoreEntry.score} ({currentHighScoreEntry.name})</span>
+              <span className="hud-value">{topEntry.score} ({topEntry.name})</span>
             </div>
           </div>
 
@@ -193,6 +165,9 @@ export const GameWrapper: React.FC<GameWrapperProps> = ({
               <p>Prepare to enter the matrix. Guide your destiny using the keyboard controls listed below.</p>
               <button className={`neon-btn ${getBtnClass()}`} onClick={onStart}>
                 <Play size={18} /> START GAME
+              </button>
+              <button className="neon-btn leaderboard-btn" onClick={handleOpenLeaderboard}>
+                <Trophy size={18} /> LEADERBOARD
               </button>
             </div>
           )}
@@ -212,7 +187,7 @@ export const GameWrapper: React.FC<GameWrapperProps> = ({
               <h3 className="neon-text-magenta">GAME OVER</h3>
               <div className="overlay-stats">
                 <div>FINAL SCORE: <span className="overlay-stat-val">{score}</span></div>
-                <div>HIGH SCORE: <span className="overlay-stat-val">{currentHighScoreEntry.score} ({currentHighScoreEntry.name})</span></div>
+                <div>HIGH SCORE: <span className="overlay-stat-val">{topEntry.score} ({topEntry.name})</span></div>
               </div>
               
               {isNewHighScore && !hasSaved ? (
@@ -237,6 +212,31 @@ export const GameWrapper: React.FC<GameWrapperProps> = ({
                   <RotateCcw size={18} /> PLAY AGAIN
                 </button>
               )}
+              <button className="neon-btn leaderboard-btn" onClick={handleOpenLeaderboard}>
+                <Trophy size={18} /> LEADERBOARD
+              </button>
+            </div>
+          )}
+
+          {showLeaderboard && (
+            <div className="game-overlay leaderboard-overlay">
+              <h3 className={getTextColorClass()}>LEADERBOARD</h3>
+              {leaderboard.length === 0 ? (
+                <p>NO SCORES YET. BE THE FIRST!</p>
+              ) : (
+                <ol className="leaderboard-list">
+                  {leaderboard.map((entry, i) => (
+                    <li key={i} className={`leaderboard-row${i === 0 ? ' leaderboard-row-top' : ''}`}>
+                      <span className="lb-rank">{i + 1}</span>
+                      <span className="lb-name">{entry.name}</span>
+                      <span className="lb-score">{entry.score}</span>
+                    </li>
+                  ))}
+                </ol>
+              )}
+              <button className={`neon-btn ${getBtnClass()}`} onClick={() => setShowLeaderboard(false)}>
+                <X size={18} /> CLOSE
+              </button>
             </div>
           )}
         </div>
